@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz - My Personal Website</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* 计时器样式 */
+        .question-timer {
+            width: 100%;
+            height: 10px;
+            background-color: #f0f0f0;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        .timer-bar {
+            height: 100%;
+            width: 100%;
+            background-color: #4a89dc;
+            transform-origin: left;
+        }
+        
+        .timer-bar.animate {
+            animation: countdown linear forwards;
+        }
+        
+        @keyframes countdown {
+            from { transform: scaleX(1); background-color: #4a89dc; }
+            to { transform: scaleX(0); background-color: #dc4a4a; }
+        }
+        
+        /* 选项样式 */
+        .options {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        .option-btn {
+            text-align: left;
+            padding: 10px 15px;
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+        }
+        
+        .option-btn:hover:not(:disabled) {
+            background-color: #e9ecef;
+        }
+        
+        .option-btn.selected {
+            background-color: #d6e9ff;
+            border-color: #4a89dc;
+        }
+        
+        .option-btn.correct {
+            background-color: #d4edda;
+            border-color: #28a745;
+        }
+        
+        /* 挑战通知样式 */
+        .challenge-notice {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            text-align: center;
+        }
+        
+        .notice-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .accept-btn {
+            background-color: #28a745;
+        }
+        
+        .reject-btn {
+            background-color: #dc3545;
+        }
+        
+        /* 游戏开始通知 */
+        .game-starting {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #4a89dc;
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            text-align: center;
+        }
+        
+        /* 玩家列表样式 */
+        .players {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .player-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            margin-bottom: 5px;
+            background-color: #f8f9fa;
+            border-radius: 3px;
+        }
+        
+        .challenge-btn {
+            padding: 5px 10px;
+            font-size: 0.9rem;
+        }
+        
+        /* 结果样式 */
+        .round-result, .final-result, .opponent-left {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        
+        .scores {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 15px;
+        }
+        
+        .answer {
+            margin-top: 5px;
+        }
+        
+        .answer.correct {
+            color: #28a745;
+        }
+        
+        .answer.wrong {
+            color: #dc3545;
+        }
+        
+        .final-scores {
+            margin: 15px 0;
+        }
+        
+        #returnToLobby {
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Web Development Quiz</h1>
+        <nav>
+            <ul>
+                <li><a href="/index.html">Home</a></li>
+                <li><a href="/about.html">About</a></li>
+                <li><a href="/quiz.html">Quiz</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section class="quiz-intro">
+            <h2>Test Your Web Development Knowledge</h2>
+            <p>Welcome to this simple Web Development quiz! Please enter your name to start.</p>
+        </section>
+
+        <section class="player-form">
+            <h2>Enter Your Information</h2>
+            <form id="playerForm">
+                <div class="form-group">
+                    <label for="playerName">Name:</label>
+                    <input type="text" id="playerName" name="playerName" required>
+                </div>
+                <button type="submit">Start Quiz</button>
+            </form>
+        </section>
+
+        <section class="players-list">
+            <h2>Players List</h2>
+            <div id="playersList">
+                <!-- Players list will be displayed here dynamically -->
+                <p>No players yet</p>
+            </div>
+        </section>
+
+        <section class="quiz-container" id="quizContainer" style="display: none;">
+            <h2>Quiz Questions</h2>
+            <div id="questions">
+                <!-- Quiz questions will be displayed here dynamically -->
+            </div>
+            <button id="submitQuiz" style="display: none;">Submit Answers</button>
+        </section>
+
+        <section class="results" id="resultsContainer" style="display: none;">
+            <h2>Quiz Results</h2>
+            <div id="results">
+                <!-- Quiz results will be displayed here dynamically -->
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 My Personal Website. JC2503 Coursework Assignment.</p>
+    </footer>
+
+    <!-- Socket.IO Client Library -->
+    <script src="/socket.io/socket.io.js"></script>
+    <!-- Custom JavaScript -->
+    <script src="/quiz.js"></script>
+</body>
+</html>

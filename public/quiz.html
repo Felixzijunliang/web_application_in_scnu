@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quiz - My Personal Website</title>
+    <title>Quiz - Knowledge Quiz</title>
     <link rel="stylesheet" href="styles.css">
     <style>
-        /* 计时器样式 */
+        /* Timer styles */
         .question-timer {
             width: 100%;
             height: 10px;
@@ -32,65 +32,141 @@
             to { transform: scaleX(0); background-color: #dc4a4a; }
         }
         
-        /* 选项样式 */
+        /* Option styles - Improved for better visibility */
         .options {
             display: flex;
             flex-direction: column;
             gap: 10px;
             margin: 20px 0;
+            list-style-type: none;
+            padding-left: 0;
         }
         
         .option-btn {
+            display: flex;
+            align-items: center;
+            width: 100%;
             text-align: left;
-            padding: 10px 15px;
+            padding: 12px 18px;
             background-color: #f8f9fa;
             border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: normal;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
         
         .option-btn:hover:not(:disabled) {
             background-color: #e9ecef;
+            transform: translateY(-2px);
+            box-shadow: 0 3px 5px rgba(0,0,0,0.15);
         }
         
         .option-btn.selected {
             background-color: #d6e9ff;
             border-color: #4a89dc;
+            font-weight: bold;
         }
         
         .option-btn.correct {
             background-color: #d4edda;
             border-color: #28a745;
+            font-weight: bold;
         }
         
-        /* 挑战通知样式 */
+        /* Adding indices to options */
+        .option-btn::before {
+            content: attr(data-letter);
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            width: 28px;
+            height: 28px;
+            min-width: 28px;
+            line-height: 28px;
+            text-align: center;
+            background-color: #4a89dc;
+            color: white;
+            border-radius: 50%;
+            margin-right: 12px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        /* Game rules hint */
+        .game-rules {
+            margin-top: 15px;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 4px solid #4a89dc;
+        }
+        
+        /* Challenge notification styles */
         .challenge-notice {
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
             background-color: white;
-            padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
             z-index: 1000;
             text-align: center;
+            max-width: 400px;
+            width: 90%;
+            animation: popup 0.3s ease-out;
+        }
+        
+        @keyframes popup {
+            from { transform: translate(-50%, -40%); opacity: 0; }
+            to { transform: translate(-50%, -50%); opacity: 1; }
         }
         
         .notice-buttons {
             display: flex;
             justify-content: center;
-            gap: 10px;
-            margin-top: 15px;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .accept-btn, .reject-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
         }
         
         .accept-btn {
             background-color: #28a745;
+            color: white;
+        }
+        
+        .accept-btn:hover {
+            background-color: #218838;
+            transform: translateY(-2px);
         }
         
         .reject-btn {
             background-color: #dc3545;
+            color: white;
         }
         
-        /* 游戏开始通知 */
+        .reject-btn:hover {
+            background-color: #c82333;
+            transform: translateY(-2px);
+        }
+        
+        /* Game starting notification */
         .game-starting {
             position: fixed;
             top: 50%;
@@ -98,51 +174,109 @@
             transform: translate(-50%, -50%);
             background-color: #4a89dc;
             color: white;
-            padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
             z-index: 1000;
             text-align: center;
+            animation: popup 0.3s ease-out;
         }
         
-        /* 玩家列表样式 */
+        /* Player list styles */
         .players {
             list-style: none;
             margin: 0;
             padding: 0;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
         }
         
         .player-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 10px;
-            margin-bottom: 5px;
+            padding: 12px 15px;
+            margin-bottom: 0;
             background-color: #f8f9fa;
-            border-radius: 3px;
+            border-bottom: 1px solid #e9ecef;
+            transition: background-color 0.2s;
+        }
+        
+        .player-item:last-child {
+            border-bottom: none;
+        }
+        
+        .player-item:hover {
+            background-color: #e9ecef;
         }
         
         .challenge-btn {
-            padding: 5px 10px;
+            padding: 6px 12px;
             font-size: 0.9rem;
+            background-color: #4a89dc;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s;
         }
         
-        /* 结果样式 */
+        .challenge-btn:hover:not(:disabled) {
+            background-color: #3a79cc;
+            transform: translateY(-2px);
+        }
+        
+        .challenge-btn:disabled {
+            background-color: #a6c5f7;
+            cursor: not-allowed;
+        }
+        
+        /* Waiting message */
+        .waiting-msg {
+            margin-top: 8px;
+            font-size: 0.85rem;
+            color: #6c757d;
+            font-style: italic;
+        }
+        
+        /* Round results and scores */
         .round-result, .final-result, .opponent-left {
             background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 5px;
+            padding: 20px;
+            border-radius: 8px;
             margin-top: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         }
         
         .scores {
             display: flex;
             justify-content: space-around;
             margin-top: 15px;
+            background-color: white;
+            border-radius: 5px;
+            padding: 15px;
+        }
+        
+        .player-score, .opponent-score {
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        .correct-answer {
+            font-weight: bold;
+            color: #28a745;
+            margin: 10px 0;
+            padding: 5px;
+            background-color: #f0f9f0;
+            border-radius: 3px;
+            display: inline-block;
         }
         
         .answer {
             margin-top: 5px;
+            font-weight: 500;
         }
         
         .answer.correct {
@@ -153,12 +287,200 @@
             color: #dc3545;
         }
         
-        .final-scores {
-            margin: 15px 0;
+        .answer.timeout {
+            color: #fd7e14;
+            font-style: italic;
         }
         
-        #returnToLobby {
+        .points-earned {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-left: 5px;
+        }
+        
+        .next-question-notice {
             margin-top: 15px;
+            padding: 10px;
+            background-color: #e9f4ff;
+            border-radius: 5px;
+            text-align: center;
+            color: #4a89dc;
+        }
+        
+        /* Page layout improvements */
+        main {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        
+        .left-column {
+            flex: 1;
+            min-width: 300px;
+        }
+        
+        .right-column {
+            flex: 2;
+            min-width: 400px;
+        }
+        
+        /* Responsive layout */
+        @media (max-width: 768px) {
+            main {
+                flex-direction: column;
+            }
+            
+            .left-column, .right-column {
+                width: 100%;
+            }
+        }
+        
+        /* Form style improvements */
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        #playerForm button {
+            background-color: #4a89dc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        #playerForm button:hover {
+            background-color: #3a79cc;
+        }
+        
+        /* Online status indicator */
+        .online-status {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: #28a745;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        /* Dynamic status hints */
+        .status-message {
+            margin: 15px 0;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        
+        .status-message.success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .status-message.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .status-message.warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        /* Answer status */
+        .answer-status {
+            margin-top: 10px;
+            font-weight: 500;
+            color: #495057;
+        }
+        
+        /* Question styles - Added for better question display */
+        .question {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .question h3 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: #333;
+            font-size: 1.2rem;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        
+        /* Quiz container section */
+        #quizContainer {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        /* Question progress styles */
+        .question-progress {
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            color: #6c757d;
+            background-color: #f8f9fa;
+            padding: 5px 10px;
+            border-radius: 15px;
+            display: inline-block;
+        }
+        
+        /* Auto next warning styles */
+        .auto-next-warning {
+            color: #dc3545;
+            font-size: 0.9rem;
+            font-style: italic;
+            margin-top: 10px;
+            font-weight: bold;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
+        }
+        
+        /* Question container updates */
+        .question {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* Timer enhancements */
+        .question-timer {
+            width: 100%;
+            height: 6px;
+            background-color: #f0f0f0;
+            margin-bottom: 15px;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        /* Next question notice enhancement */
+        .next-question-notice {
+            background-color: #e9f4ff;
+            border-radius: 5px;
+            padding: 10px;
+            text-align: center;
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        
+        .next-question-countdown {
+            font-size: 1.1em;
+            color: #4a89dc;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -169,54 +491,87 @@
             <ul>
                 <li><a href="/index.html">Home</a></li>
                 <li><a href="/about.html">About</a></li>
-                <li><a href="/quiz.html">Quiz</a></li>
+                <li><a href="/quiz.html" class="active">Quiz</a></li>
+                <li><a href="/stats.html">Statistics</a></li>
             </ul>
         </nav>
     </header>
 
     <main>
-        <section class="quiz-intro">
-            <h2>Test Your Web Development Knowledge</h2>
-            <p>Welcome to this simple Web Development quiz! Please enter your name to start.</p>
-        </section>
+        <section class="left-column">
+            <section class="player-form">
+                <h2>Enter Your Information</h2>
+                <form id="playerForm">
+                    <div class="form-group">
+                        <label for="playerName">Username:</label>
+                        <input type="text" id="playerName" name="playerName" required placeholder="Enter your username">
+                    </div>
+                    <button type="submit">Join Game</button>
+                </form>
+            </section>
 
-        <section class="player-form">
-            <h2>Enter Your Information</h2>
-            <form id="playerForm">
-                <div class="form-group">
-                    <label for="playerName">Name:</label>
-                    <input type="text" id="playerName" name="playerName" required>
+            <section class="players-list">
+                <h2>Online Players</h2>
+                <div class="status-message info">
+                    <p>Select a player to challenge!</p>
                 </div>
-                <button type="submit">Start Quiz</button>
-            </form>
+                <div id="playersList">
+                    <!-- Player list will be displayed here dynamically -->
+                    <p>No other players online</p>
+                </div>
+            </section>
         </section>
 
-        <section class="players-list">
-            <h2>Players List</h2>
-            <div id="playersList">
-                <!-- Players list will be displayed here dynamically -->
-                <p>No players yet</p>
-            </div>
-        </section>
+        <section class="right-column">
+            <section class="quiz-intro">
+                <h2>Test Your Web Development Knowledge</h2>
+                <p>Welcome to the Web Development Quiz! Please enter your username to start.</p>
+                <ul>
+                    <li>Challenge other players one-on-one</li>
+                    <li>Faster correct answer gets 2 points, opponent 0 points</li>
+                    <li>Wrong answer gives opponent 1 point</li>
+                    <li>Each game has at least 5 questions, with 5-10 seconds between rounds</li>
+                </ul>
+                <p class="game-rules">All your games will be recorded in the statistics page. Check your performance history!</p>
+                <a href="/stats.html" class="button">View Quiz Statistics</a>
+            </section>
 
-        <section class="quiz-container" id="quizContainer" style="display: none;">
-            <h2>Quiz Questions</h2>
-            <div id="questions">
-                <!-- Quiz questions will be displayed here dynamically -->
-            </div>
-            <button id="submitQuiz" style="display: none;">Submit Answers</button>
-        </section>
+            <section class="quiz-container" id="quizContainer" style="display: none;">
+                <h2>Quiz Questions</h2>
+                <div id="questions">
+                    <!-- Questions will be displayed here dynamically -->
+                    <!-- Example structure (for demonstration purposes):
+                    <div class="question" data-id="1">
+                        <div class="question-timer">
+                            <div class="timer-bar"></div>
+                        </div>
+                        <h3>Question 1: Which HTML5 tag is used to define navigation links?</h3>
+                        <div class="options">
+                            <button class="option-btn" data-index="0">&lt;nav&gt;</button>
+                            <button class="option-btn" data-index="1">&lt;navigation&gt;</button>
+                            <button class="option-btn" data-index="2">&lt;menu&gt;</button>
+                            <button class="option-btn" data-index="3">&lt;links&gt;</button>
+                        </div>
+                        <div class="game-rules">
+                            <p>Rules: Faster correct answer gets 2 points, opponent 0 points; Wrong answer gives opponent 1 point</p>
+                            <p>Time remaining: <span class="time-left">10</span> seconds</p>
+                        </div>
+                    </div>
+                    -->
+                </div>
+            </section>
 
-        <section class="results" id="resultsContainer" style="display: none;">
-            <h2>Quiz Results</h2>
-            <div id="results">
-                <!-- Quiz results will be displayed here dynamically -->
-            </div>
+            <section class="results" id="resultsContainer" style="display: none;">
+                <h2>Quiz Results</h2>
+                <div id="results">
+                    <!-- Results will be displayed here dynamically -->
+                </div>
+            </section>
         </section>
     </main>
 
     <footer>
-        <p>&copy; 2025 My Personal Website. JC2503 Coursework Assignment.</p>
+        <p>&copy; 2023 Knowledge Quiz | SCNU Web Application</p>
     </footer>
 
     <!-- Socket.IO Client Library -->

@@ -4,6 +4,7 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 const PORT = process.env.PORT || 3000;
+const db = require('./database');
 
 // Game configuration and state
 const questions = [
@@ -36,6 +37,24 @@ const questions = [
     question: "In HTML, which attribute is used to specify the URL where a form should be submitted?",
     options: ["url", "action", "link", "submit"],
     correctAnswer: 1
+  },
+  {
+    id: 6,
+    question: "Which JavaScript event is triggered when a user clicks on an element?",
+    options: ["onmouseover", "onchange", "onclick", "onsubmit"],
+    correctAnswer: 2
+  },
+  {
+    id: 7,
+    question: "What does CSS stand for?",
+    options: ["Computer Style Sheets", "Cascading Style Sheets", "Creative Style Sheets", "Colorful Style Sheets"],
+    correctAnswer: 1
+  },
+  {
+    id: 8,
+    question: "Which HTML tag is used to create a table?",
+    options: ["<table>", "<tb>", "<tr>", "<tab>"],
+    correctAnswer: 0
   }
 ];
 
@@ -46,9 +65,34 @@ const players = {};
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
+// 中间件记录所有访问
+app.use((req, res, next) => {
+  db.recordVisit(req);
+  next();
+});
+
 // Redirect root path to index.html
 app.get('/', (req, res) => {
   res.redirect('/index.html');
+});
+
+// 添加API路由获取统计数据
+app.get('/api/stats', async (req, res) => {
+  try {
+    const visitStats = await db.getVisitStats();
+    const quizzes = await db.getAllQuizzes();
+    res.json({ 
+      success: true, 
+      visitStats, 
+      quizzes 
+    });
+  } catch (error) {
+    console.error('获取统计数据失败:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: '获取统计数据失败' 
+    });
+  }
 });
 
 // Socket.IO event handling
@@ -212,6 +256,8 @@ function startGame(roomId) {
   
   room.gameStarted = true;
   room.currentQuestion = 1;
+  room.totalQuestions = 5; // 限制每个quiz为5题
+  room.questionTimers = {}; // 存储题目计时器
   
   // Send first question
   sendQuestion(roomId, room.currentQuestion);
@@ -220,21 +266,71 @@ function startGame(roomId) {
 // Send question function
 function sendQuestion(roomId, questionId) {
   const room = rooms[roomId];
-  if (!room || questionId > questions.length) {
+  if (!room) return;
+  
+  // 确保不超过总题目数量
+  if (questionId > room.totalQuestions) {
     // Game over
     endGame(roomId);
     return;
   }
   
-  const question = questions[questionId-1];
+  // 从问题池中随机选择一个题目
+  const questionIndex = Math.floor(Math.random() * questions.length);
+  const question = questions[questionIndex];
+  
+  // 清除之前的计时器
+  if (room.questionTimers[questionId-1]) {
+    clearTimeout(room.questionTimers[questionId-1]);
+  }
+  
+  // 创建新的答题计时器（10秒后自动进入下一题）
+  const timeLimit = 10; // 10秒作答时间
+  room.questionTimers[questionId] = setTimeout(() => {
+    // 如果双方都还没回答，就自动为他们提交随机答案
+    if (!room.answers[questionId] || Object.keys(room.answers[questionId]).length < 2) {
+      // 为未答题的玩家自动提交随机答案
+      room.players.forEach(playerId => {
+        if (!room.answers[questionId] || !room.answers[questionId][playerId]) {
+          // 如果该玩家还没回答
+          if (!room.answers[questionId]) {
+            room.answers[questionId] = {};
+          }
+          
+          // 记录超时情况（不提交随机答案，标记为超时）
+          room.answers[questionId][playerId] = {
+            playerId,
+            answerId: -1, // 表示超时未回答
+            answerTime: timeLimit,
+            isCorrect: false, // 超时未回答视为错误
+            timedOut: true // 标记为超时
+          };
+          
+          // 找到对手ID
+          const opponentId = room.players.find(id => id !== playerId);
+          
+          // 超时未回答，对手得1分
+          if (opponentId && room.scores) {
+            room.scores[opponentId] += 1;
+          }
+        }
+      });
+      
+      // 计算分数并进入下一题
+      calculateScores(roomId, questionId);
+    }
+  }, timeLimit * 1000);
+  
+  // 发送题目给客户端
   io.to(roomId).emit('newQuestion', {
-    questionId: question.id,
+    questionId: questionId,
     question: question.question,
     options: question.options,
-    timeLimit: 10 // 10 seconds to answer
+    timeLimit: timeLimit,
+    totalQuestions: room.totalQuestions // 发送总题目数给客户端
   });
   
-  console.log(`Room ${roomId} sent question ${questionId}`);
+  console.log(`Room ${roomId} sent question ${questionId} of ${room.totalQuestions}`);
 }
 
 // Calculate scores function
@@ -242,95 +338,169 @@ function calculateScores(roomId, questionId) {
   const room = rooms[roomId];
   if (!room) return;
   
+  // 清除该题的计时器
+  if (room.questionTimers[questionId]) {
+    clearTimeout(room.questionTimers[questionId]);
+    delete room.questionTimers[questionId];
+  }
+  
   const answers = room.answers[questionId];
   const playerIds = Object.keys(answers);
   
-  playerIds.forEach(playerId => {
-    const answer = answers[playerId];
-    
-    // Correct answer gets 2 points
-    if (answer.isCorrect) {
-      room.scores[playerId] += 2;
-    } 
-    // Wrong answer but faster than opponent gets 1 point
-    else {
-      const otherPlayerId = room.players.find(id => id !== playerId);
-      if (otherPlayerId && answers[otherPlayerId]) {
-        if (answers[otherPlayerId].isCorrect === false && 
-            answer.answerTime < answers[otherPlayerId].answerTime) {
-          room.scores[playerId] += 1;
-        }
+  if (playerIds.length !== 2) return;
+  
+  const [player1Id, player2Id] = playerIds;
+  const player1Answer = answers[player1Id];
+  const player2Answer = answers[player2Id];
+  
+  // 如果已经在超时处理中给对手加分，则跳过
+  if (!player1Answer.timedOut && !player2Answer.timedOut) {
+    // 游戏规则：答对快者得2分，对手0分；答错则对手得1分
+    if (player1Answer.isCorrect && player2Answer.isCorrect) {
+      // 两人都答对，答得快的得2分，对手0分
+      if (player1Answer.answerTime < player2Answer.answerTime) {
+        room.scores[player1Id] += 2;
+        // 对手0分，不需要加
+      } else {
+        room.scores[player2Id] += 2;
+        // 对手0分，不需要加
       }
+    } else if (player1Answer.isCorrect && !player2Answer.isCorrect) {
+      // player1答对，player2答错
+      room.scores[player1Id] += 2; // 答对者得2分
+      // player2答错，不得分
+    } else if (!player1Answer.isCorrect && player2Answer.isCorrect) {
+      // player1答错，player2答对
+      room.scores[player2Id] += 2; // 答对者得2分
+      // player1答错，不得分
+    } else {
+      // 两人都答错，不得分
     }
-  });
+    
+    // 处理答错情况：答错则对手得1分
+    if (!player1Answer.isCorrect && !player1Answer.timedOut) {
+      room.scores[player2Id] += 1; // player1答错，对手得1分
+    }
+    
+    if (!player2Answer.isCorrect && !player2Answer.timedOut) {
+      room.scores[player1Id] += 1; // player2答错，对手得1分
+    }
+  }
+  
+  // 查找问题
+  const questionForResult = questions.find(q => q.question === room.currentQuestionObj?.question) || 
+                           questions[Math.floor(Math.random() * questions.length)];
   
   // Send round results
   io.to(roomId).emit('questionResult', {
     questionId,
-    correctAnswer: questions[questionId-1].correctAnswer,
+    correctAnswer: questionForResult.correctAnswer,
+    options: questionForResult.options,
     answers: answers,
-    scores: room.scores
+    scores: room.scores,
+    currentQuestion: questionId,
+    totalQuestions: room.totalQuestions
   });
   
-  // Send next question or end game after 5 seconds
+  // 固定3秒后进入下一题
+  const nextQuestionDelay = 3000; // 固定3秒
+  
+  // Send next question or end game after delay
   setTimeout(() => {
     if (!rooms[roomId]) return;
     
     room.currentQuestion += 1;
-    if (room.currentQuestion <= questions.length) {
+    if (room.currentQuestion <= room.totalQuestions) {
       sendQuestion(roomId, room.currentQuestion);
     } else {
       endGame(roomId);
     }
-  }, 5000);
+  }, nextQuestionDelay);
 }
 
 // End game function
 function endGame(roomId) {
+  if (!rooms[roomId]) return;
+  
   const room = rooms[roomId];
-  if (!room) return;
+  const player1Id = room.players[0];
+  const player2Id = room.players[1];
+  const player1Score = room.scores[player1Id];
+  const player2Score = room.scores[player2Id];
+  const player1Name = players[player1Id] ? players[player1Id].name : 'Unknown';
+  const player2Name = players[player2Id] ? players[player2Id].name : 'Unknown';
   
-  // Determine winner
-  const [player1Id, player2Id] = room.players;
+  let winner = 'Tie';
   let winnerId = null;
-  let winnerName = null;
+  let isTie = true;
   
-  if (room.scores[player1Id] > room.scores[player2Id]) {
+  if (player1Score > player2Score) {
+    winner = player1Name;
     winnerId = player1Id;
-    winnerName = players[player1Id].name;
-  } else if (room.scores[player2Id] > room.scores[player1Id]) {
+    isTie = false;
+  } else if (player2Score > player1Score) {
+    winner = player2Name;
     winnerId = player2Id;
-    winnerName = players[player2Id].name;
+    isTie = false;
   }
   
-  // Send game results
+  // 保存游戏结果到数据库
+  db.recordQuizResult(
+    roomId,
+    player1Id,
+    player1Name,
+    player2Id,
+    player2Name,
+    player1Score,
+    player2Score,
+    winner
+  );
+  
+  // 发送结果给双方
   io.to(roomId).emit('gameOver', {
     scores: room.scores,
-    winnerId,
-    winnerName,
-    isTie: winnerId === null
+    player1: {
+      id: player1Id,
+      name: player1Name,
+      score: player1Score
+    },
+    player2: {
+      id: player2Id,
+      name: player2Name,
+      score: player2Score
+    },
+    winner: winner,
+    winnerId: winnerId,
+    isTie: isTie
   });
   
-  console.log(`Game ${roomId} ended, winner: ${winnerName || 'Tie'}`);
+  // 更新玩家状态
+  if (players[player1Id]) {
+    players[player1Id].inGame = false;
+    players[player1Id].room = null;
+  }
   
-  // Update player status
-  room.players.forEach(playerId => {
-    if (players[playerId]) {
-      players[playerId].inGame = false;
-      players[playerId].room = null;
-    }
-  });
+  if (players[player2Id]) {
+    players[player2Id].inGame = false;
+    players[player2Id].room = null;
+  }
   
-  // Broadcast updated player list
+  // 更新玩家列表
   io.emit('playersList', Object.values(players).filter(p => !p.inGame));
   
-  // Delete room
-  setTimeout(() => {
-    delete rooms[roomId];
-  }, 1000);
+  // 删除房间
+  delete rooms[roomId];
+  
+  console.log(`Game ended in room ${roomId}`);
 }
+
+// 关闭应用时正确关闭数据库连接
+process.on('SIGINT', () => {
+  db.closeDatabase();
+  process.exit(0);
+});
 
 // Start server
 http.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });

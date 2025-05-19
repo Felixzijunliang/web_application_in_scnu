@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statistics - Knowledge Quiz</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .stats-container {
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .stats-section {
+            margin-bottom: 30px;
+        }
+        
+        .stats-title {
+            margin-bottom: 15px;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 8px;
+        }
+        
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        
+        .stats-table th, .stats-table td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        
+        .stats-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        
+        .stats-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        .stats-table tr:hover {
+            background-color: #f1f1f1;
+        }
+        
+        .chart-container {
+            height: 300px;
+            margin-top: 20px;
+        }
+        
+        .back-button {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 8px 16px;
+            background-color: #3498db;
+            color: white;
+            border-radius: 4px;
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+        
+        .back-button:hover {
+            background-color: #2980b9;
+        }
+        
+        .winner {
+            font-weight: bold;
+            color: #27ae60;
+        }
+        
+        .tie {
+            font-weight: bold;
+            color: #f39c12;
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 20px;
+            color: #7f8c8d;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Website Statistics</h1>
+        <nav>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="quiz.html">Quiz</a></li>
+                <li><a href="about.html">About</a></li>
+                <li><a href="stats.html" class="active">Statistics</a></li>
+            </ul>
+        </nav>
+    </header>
+    
+    <main>
+        <div class="stats-container">
+            <div class="stats-section">
+                <h2 class="stats-title">Visit Statistics</h2>
+                <p>Website visits in the last 14 days:</p>
+                <div class="chart-container" id="visitsChart">
+                    <div class="no-data">Loading...</div>
+                </div>
+            </div>
+            
+            <div class="stats-section">
+                <h2 class="stats-title">Quiz Records</h2>
+                <div id="quizTable">
+                    <div class="no-data">Loading...</div>
+                </div>
+            </div>
+            
+            <a href="index.html" class="back-button">Back to Home</a>
+        </div>
+    </main>
+    
+    <footer>
+        <p>&copy; 2023 Knowledge Quiz | SCNU Web Application</p>
+    </footer>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Get statistics data
+            fetch('/api/stats')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        renderVisitChart(data.visitStats);
+                        renderQuizTable(data.quizzes);
+                    } else {
+                        showError('Failed to get data');
+                    }
+                })
+                .catch(error => {
+                    console.error('Failed to get statistics data:', error);
+                    showError('Failed to get data. Please refresh the page and try again.');
+                });
+        });
+        
+        function renderVisitChart(visitStats) {
+            if (!visitStats || visitStats.length === 0) {
+                document.getElementById('visitsChart').innerHTML = '<div class="no-data">No visit data available</div>';
+                return;
+            }
+            
+            // Prepare chart data
+            const dates = visitStats.map(item => item.date);
+            const visits = visitStats.map(item => item.total);
+            
+            // Create chart
+            const ctx = document.createElement('canvas');
+            document.getElementById('visitsChart').innerHTML = '';
+            document.getElementById('visitsChart').appendChild(ctx);
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: 'Visits',
+                        data: visits,
+                        backgroundColor: 'rgba(52, 152, 219, 0.6)',
+                        borderColor: 'rgba(52, 152, 219, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function renderQuizTable(quizzes) {
+            const tableContainer = document.getElementById('quizTable');
+            
+            if (!quizzes || quizzes.length === 0) {
+                tableContainer.innerHTML = '<div class="no-data">No quiz records available</div>';
+                return;
+            }
+            
+            // Create table
+            let tableHTML = `
+                <table class="stats-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Player 1</th>
+                            <th>Score</th>
+                            <th>Player 2</th>
+                            <th>Score</th>
+                            <th>Winner</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            quizzes.forEach(quiz => {
+                const date = new Date(quiz.timestamp).toLocaleString();
+                const winnerClass = quiz.winner === 'Tie' ? 'tie' : 'winner';
+                const winnerText = quiz.winner === 'Tie' ? 'Tie' : quiz.winner;
+                
+                tableHTML += `
+                    <tr>
+                        <td>${date}</td>
+                        <td>${quiz.player1_name}</td>
+                        <td>${quiz.player1_score}</td>
+                        <td>${quiz.player2_name}</td>
+                        <td>${quiz.player2_score}</td>
+                        <td class="${winnerClass}">${winnerText}</td>
+                    </tr>
+                `;
+            });
+            
+            tableHTML += `
+                    </tbody>
+                </table>
+            `;
+            
+            tableContainer.innerHTML = tableHTML;
+        }
+        
+        function showError(message) {
+            document.getElementById('visitsChart').innerHTML = `<div class="no-data">${message}</div>`;
+            document.getElementById('quizTable').innerHTML = `<div class="no-data">${message}</div>`;
+        }
+    </script>
+</body>
+</html> 

@@ -232,14 +232,27 @@ socket.on('newQuestion', function(data) {
   // Create question HTML
   const questionHTML = `
     <div class="question" data-id="${data.questionId}">
+      <div class="question-progress">
+        <span>Question ${data.questionId} of ${data.totalQuestions}</span>
+      </div>
       <div class="question-timer">
         <div class="timer-bar"></div>
       </div>
       <h3>Question ${data.questionId}: ${data.question}</h3>
       <div class="options">
-        ${data.options.map((option, index) => `
-          <button class="option-btn" data-index="${index}">${option}</button>
-        `).join('')}
+        ${data.options.map((option, index) => {
+          const letters = ['A', 'B', 'C', 'D', 'E', 'F']; // Option letters
+          // Properly escape HTML content for display - needed for HTML tags in options
+          const displayOption = option
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+          return `<button class="option-btn" data-index="${index}" data-letter="${letters[index] || index}">${displayOption}</button>`;
+        }).join('')}
+      </div>
+      <div class="game-rules">
+        <p>Rules: Faster correct answer gets 2 points, opponent 0 points; Wrong answer gives opponent 1 point</p>
+        <p>Time remaining: <span class="time-left">${data.timeLimit}</span> seconds</p>
+        <p class="auto-next-warning">If no answer is given, a random answer will be submitted automatically!</p>
       </div>
     </div>
   `;
@@ -252,6 +265,19 @@ socket.on('newQuestion', function(data) {
   const animationDuration = `${data.timeLimit}s`;
   timerBar.style.animationDuration = animationDuration;
   timerBar.classList.add('animate');
+  
+  // Update countdown timer
+  const timeLeftSpan = questions.querySelector('.time-left');
+  let timeLeft = data.timeLimit;
+  const countdownInterval = setInterval(() => {
+    timeLeft -= 1;
+    if (timeLeftSpan) {
+      timeLeftSpan.textContent = timeLeft;
+    }
+    if (timeLeft <= 0) {
+      clearInterval(countdownInterval);
+    }
+  }, 1000);
   
   // Listen for option clicks
   const optionBtns = questions.querySelectorAll('.option-btn');
@@ -266,6 +292,15 @@ socket.on('newQuestion', function(data) {
       
       // Calculate answer time
       const answerTime = (Date.now() - startTime) / 1000;
+      
+      // Add answering status message
+      const statusMsg = document.createElement('p');
+      statusMsg.classList.add('answer-status');
+      statusMsg.textContent = 'Answer submitted, waiting for opponent...';
+      questions.querySelector('.game-rules').appendChild(statusMsg);
+      
+      // Clear countdown interval
+      clearInterval(countdownInterval);
       
       // Send answer
       socket.emit('submitAnswer', {
@@ -284,12 +319,23 @@ socket.on('newQuestion', function(data) {
       // Disable all options
       optionBtns.forEach(btn => btn.disabled = true);
       
-      // Send timeout (random answer)
+      // Add timeout message
+      const statusMsg = document.createElement('p');
+      statusMsg.classList.add('answer-status');
+      statusMsg.textContent = 'Time\'s up! You did not answer in time. Your opponent will get 1 point.';
+      statusMsg.style.color = '#dc3545';
+      questions.querySelector('.game-rules').appendChild(statusMsg);
+      
+      // Clear countdown interval
+      clearInterval(countdownInterval);
+      
+      // Send timeout (without random answer)
       socket.emit('submitAnswer', {
         roomId: currentRoom,
         questionId: data.questionId,
-        answerId: Math.floor(Math.random() * data.options.length),
-        answerTime: data.timeLimit
+        answerId: -1, // -1 表示超时未回答
+        answerTime: data.timeLimit,
+        timedOut: true // 标记为超时
       });
     }
   }, data.timeLimit * 1000);
@@ -324,30 +370,77 @@ socket.on('questionResult', function(data) {
   const playerAnswer = data.answers[playerId];
   const opponentAnswer = data.answers[opponentId];
   
+  // Calculate points earned this round
+  const prevRound = document.querySelector('.round-result');
+  let playerPrevScore = 0;
+  let opponentPrevScore = 0;
+  
+  if (prevRound) {
+    // Extract previous scores if available
+    const playerScoreText = prevRound.querySelector('.player-score strong').nextSibling.textContent;
+    const opponentScoreText = prevRound.querySelector('.opponent-score strong').nextSibling.textContent;
+    
+    playerPrevScore = parseInt(playerScoreText.match(/\d+/)[0]) || 0;
+    opponentPrevScore = parseInt(opponentScoreText.match(/\d+/)[0]) || 0;
+  }
+  
+  const playerPointsEarned = data.scores[playerId] - playerPrevScore;
+  const opponentPointsEarned = data.scores[opponentId] - opponentPrevScore;
+  
+  // Get the correct answer text and properly escape HTML tags
+  const correctAnswerText = data.options[data.correctAnswer]
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  
   // Create result HTML
   const resultHTML = `
     <div class="round-result">
-      <h3>Question ${data.questionId} Results</h3>
+      <h3>Question ${data.questionId} of ${data.totalQuestions} Results</h3>
+      <p class="correct-answer">Correct answer: ${correctAnswerText}</p>
       <div class="scores">
         <div class="player-score">
-          <p><strong>You</strong>: ${data.scores[playerId]} points</p>
-          <p class="answer ${playerAnswer?.isCorrect ? 'correct' : 'wrong'}">
-            ${playerAnswer?.isCorrect ? '✓ Correct' : '✗ Wrong'} 
+          <p><strong>You</strong>: ${data.scores[playerId]} points <span class="points-earned">(+${playerPointsEarned})</span></p>
+          <p class="answer ${playerAnswer?.isCorrect ? 'correct' : playerAnswer?.timedOut ? 'timeout' : 'wrong'}">
+            ${playerAnswer?.isCorrect ? '✓ Correct' : 
+              playerAnswer?.timedOut ? '⏱ Time\'s up' : '✗ Wrong'} 
             (${playerAnswer?.answerTime.toFixed(2)} seconds)
           </p>
         </div>
         <div class="opponent-score">
-          <p><strong>Opponent</strong>: ${data.scores[opponentId]} points</p>
-          <p class="answer ${opponentAnswer?.isCorrect ? 'correct' : 'wrong'}">
-            ${opponentAnswer?.isCorrect ? '✓ Correct' : '✗ Wrong'} 
+          <p><strong>Opponent</strong>: ${data.scores[opponentId]} points <span class="points-earned">(+${opponentPointsEarned})</span></p>
+          <p class="answer ${opponentAnswer?.isCorrect ? 'correct' : opponentAnswer?.timedOut ? 'timeout' : 'wrong'}">
+            ${opponentAnswer?.isCorrect ? '✓ Correct' : 
+              opponentAnswer?.timedOut ? '⏱ Time\'s up' : '✗ Wrong'} 
             (${opponentAnswer?.answerTime.toFixed(2)} seconds)
           </p>
         </div>
+      </div>
+      <div class="next-question-notice">
+        ${data.questionId < data.totalQuestions 
+          ? `<p>Next question will start in <span class="next-question-countdown">3</span> seconds...</p>` 
+          : `<p>This was the last question. Calculating final results...</p>`}
       </div>
     </div>
   `;
   
   results.innerHTML = resultHTML;
+  
+  // Begin a countdown timer for next question time
+  if (data.questionId < data.totalQuestions) {
+    const countdownEl = document.querySelector('.next-question-countdown');
+    let estimatedCountdown = 3; // Fixed 3 seconds
+    
+    const nextQuestionInterval = setInterval(() => {
+      estimatedCountdown -= 1;
+      if (countdownEl) {
+        countdownEl.textContent = estimatedCountdown;
+      }
+      if (estimatedCountdown <= 0) {
+        clearInterval(nextQuestionInterval);
+        countdownEl.textContent = "starting now";
+      }
+    }, 1000);
+  }
 });
 
 // Game over
@@ -362,29 +455,58 @@ socket.on('gameOver', function(data) {
   const playerId = currentPlayer.id;
   const opponentId = Object.keys(data.scores).find(id => id !== playerId);
   
+  // 调试信息，帮助排查问题
+  console.log('Game over data:', data);
+  console.log('Current player ID:', playerId);
+  
   // Determine result
   let resultMessage = '';
+  let resultClass = '';
+  
   if (data.isTie) {
     resultMessage = 'Game Over, It\'s a tie!';
+    resultClass = 'tie';
   } else if (data.winnerId === playerId) {
     resultMessage = 'Congratulations, You won!';
+    resultClass = 'win';
   } else {
     resultMessage = 'Sorry, You lost!';
+    resultClass = 'lose';
   }
+  
+  // 显示谁是获胜者
+  const winnerName = data.winnerId ? 
+    (data.winnerId === playerId ? 'You' : data.player2.id === data.winnerId ? data.player2.name : data.player1.name) : 
+    'Nobody (Tie)';
   
   // Create final result HTML
   const finalResultHTML = `
-    <div class="final-result">
-      <h3>${resultMessage}</h3>
+    <div class="final-result ${resultClass}">
+      <h3 class="result-message">${resultMessage}</h3>
       <div class="final-scores">
-        <p><strong>Your score</strong>: ${data.scores[playerId]}</p>
-        <p><strong>Opponent score</strong>: ${data.scores[opponentId]}</p>
+        <div class="player-final-score">
+          <h4>Your Score</h4>
+          <div class="score-value">${data.scores[playerId]}</div>
+        </div>
+        <div class="vs">VS</div>
+        <div class="opponent-final-score">
+          <h4>Opponent Score</h4>
+          <div class="score-value">${data.scores[opponentId]}</div>
+        </div>
       </div>
-      <button id="returnToLobby">Return to Lobby</button>
+      <div class="game-summary">
+        <p>Winner: <strong>${winnerName}</strong></p>
+        <p>Game Rules: Faster correct answer gets 2 points, opponent 0 points; Wrong answer or timeout gives opponent 1 point</p>
+        <p>Thanks for playing!</p>
+      </div>
+      <button id="returnToLobby" class="primary-btn">Return to Lobby</button>
     </div>
   `;
   
   results.innerHTML = finalResultHTML;
+  
+  // Add special styles for the final result
+  addGameOverStyles();
   
   // Listen for return button
   document.getElementById('returnToLobby').addEventListener('click', function() {
@@ -411,7 +533,7 @@ socket.on('opponentLeft', function(data) {
     <div class="opponent-left">
       <h3>Opponent Left</h3>
       <p>${data.name} has left the game.</p>
-      <button id="returnToLobby">Return to Lobby</button>
+      <button id="returnToLobby" class="primary-btn">Return to Lobby</button>
     </div>
   `;
   
@@ -426,4 +548,88 @@ socket.on('opponentLeft', function(data) {
     // Hide results container
     resultsContainer.style.display = 'none';
   });
-}); 
+});
+
+// Add styles for game over screen
+function addGameOverStyles() {
+  // Add a style element if it doesn't exist
+  let styleElement = document.getElementById('gameOverStyles');
+  if (!styleElement) {
+    styleElement = document.createElement('style');
+    styleElement.id = 'gameOverStyles';
+    document.head.appendChild(styleElement);
+  }
+  
+  // Add CSS rules
+  styleElement.textContent = `
+    .final-result {
+      text-align: center;
+      padding: 20px;
+      border-radius: 10px;
+      animation: fadeIn 0.5s ease-out;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .result-message {
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+    
+    .win .result-message { color: #28a745; }
+    .lose .result-message { color: #dc3545; }
+    .tie .result-message { color: #ffc107; }
+    
+    .final-scores {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 30px 0;
+    }
+    
+    .player-final-score, .opponent-final-score {
+      padding: 15px;
+      border-radius: 5px;
+      background-color: #f8f9fa;
+      width: 40%;
+    }
+    
+    .vs {
+      margin: 0 20px;
+      font-weight: bold;
+      font-size: 18px;
+    }
+    
+    .score-value {
+      font-size: 36px;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+    
+    .win .player-final-score .score-value { color: #28a745; }
+    .lose .opponent-final-score .score-value { color: #28a745; }
+    
+    .game-summary {
+      margin: 20px 0;
+      font-size: 14px;
+      color: #6c757d;
+    }
+    
+    .primary-btn {
+      background-color: #4a89dc;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    
+    .primary-btn:hover {
+      background-color: #3a79cc;
+    }
+  `;
+} 

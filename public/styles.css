@@ -159,3 +159,36 @@ footer {
         align-items: center;
     }
 }
+
+/* 按钮样式 */
+.button {
+    display: inline-block;
+    padding: 10px 16px;
+    margin: 10px 5px;
+    background-color: #3498db;
+    color: white;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: background-color 0.3s;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.button:hover {
+    background-color: #2980b9;
+}
+
+.primary-button {
+    background-color: #27ae60;
+}
+
+.primary-button:hover {
+    background-color: #219d55;
+}
+
+/* 添加活动链接样式 */
+nav ul li a.active {
+    background-color: #3498db;
+    color: white;
+}
